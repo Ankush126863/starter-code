@@ -17,31 +17,20 @@ cd backend
 npm run setup    # Installs dependencies and initializes database
 cp .env.example .env
 npm run dev
-```
+Backend runs on: http://localhost:3001
 
-Backend runs on: `http://localhost:3001`
-
-### 2. Frontend Setup
-
-```bash
+2. Frontend Setup
 cd frontend
 npm install
 npm run dev
-```
+Frontend runs on: http://localhost:5173
 
-Frontend runs on: `http://localhost:5173`
-
-### Test Credentials
-
-| Role     | Email              | Password    |
-|----------|-------------------|-------------|
-| Manager  | manager@unolo.com | password123 |
-| Employee | rahul@unolo.com   | password123 |
-| Employee | priya@unolo.com   | password123 |
-
-## Project Structure
-
-```
+Test Credentials
+Role	Email	Password
+Manager	manager@unolo.com	password123
+Employee	rahul@unolo.com	password123
+Employee	priya@unolo.com	password123
+Project Structure
 ├── backend/
 │   ├── config/          # Database configuration
 │   ├── middleware/      # Auth middleware
@@ -55,26 +44,35 @@ Frontend runs on: `http://localhost:5173`
 │   │   └── utils/       # API helpers
 │   └── index.html
 └── database/            # SQL schemas (reference only)
-```
+API Endpoints
+Authentication
+POST /api/auth/login - Login
 
-## API Endpoints
+GET /api/auth/me - Get current user
 
-### Authentication
-- `POST /api/auth/login` - Login
-- `GET /api/auth/me` - Get current user
+Check-ins
+GET /api/checkin/clients - Get assigned clients
 
-### Check-ins
-- `GET /api/checkin/clients` - Get assigned clients
-- `POST /api/checkin` - Create check-in
-- `PUT /api/checkin/checkout` - Checkout
-- `GET /api/checkin/history` - Get check-in history
-- `GET /api/checkin/active` - Get active check-in
+POST /api/checkin - Create check-in
 
-### Dashboard
-- `GET /api/dashboard/stats` - Manager stats
-- `GET /api/dashboard/employee` - Employee stats
+PUT /api/checkin/checkout - Checkout
 
-## Notes
+GET /api/checkin/history - Get check-in history
 
-- The database uses SQLite - no external database setup required
-- Run `npm run init-db` to reset the database to initial state
+GET /api/checkin/active - Get active check-in
+
+Dashboard
+GET /api/dashboard/stats - Manager stats
+
+GET /api/dashboard/employee - Employee stats
+
+Notes
+The database uses SQLite - no external database setup required.
+
+Run npm run init-db to reset the database to initial state.
+
+Includes new features:
+
+Distance-based check-in validation
+ 
+Daily summary report API
