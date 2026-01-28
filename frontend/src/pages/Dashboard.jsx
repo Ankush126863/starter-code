@@ -15,9 +15,13 @@ function Dashboard({ user }) {
             const endpoint = user.id === 1 ? '/dashboard/stats' : '/dashboard/employee';
             const response = await api.get(endpoint);
             
-            if (response.data.success) {
-                setStats(response.data.data);
-            }
+        if (response.data.success) {
+            setStats(response.data.data);
+        } else {
+            setError('Failed to load dashboard');
+        }
+
+
         } catch (err) {
             setError('Failed to load dashboard');
             console.error(err);
