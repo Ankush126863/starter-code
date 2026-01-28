@@ -1,22 +1,31 @@
 import { useState, useEffect } from 'react';
-
-function ActivityList({ items, filter, onItemSelect }) {
-    const [filteredItems, setFilteredItems] = useState([]);
+import { useMemo } from 'react';
+function ActivityList({ items, filter, onItemSelect }) { 
     const [lastUpdate, setLastUpdate] = useState(new Date());
 
-    useEffect(() => {
-        const filtered = items.filter(item => {
+    // useEffect(() => {
+    //     const filtered = items.filter(item => {
+    //         if (filter.status && item.status !== filter.status) return false;
+    //         if (filter.type && item.type !== filter.type) return false;
+    //         return true;
+    //     });
+    //     setFilteredItems(filtered);
+    // }, [items, filter]);
+    
+
+    const filteredItems = useMemo(() => {
+        return items.filter(item => {
             if (filter.status && item.status !== filter.status) return false;
             if (filter.type && item.type !== filter.type) return false;
             return true;
         });
-        setFilteredItems(filtered);
     }, [items, filter]);
 
     useEffect(() => {
         const interval = setInterval(() => {
             setLastUpdate(new Date());
         }, 30000);
+        return () => clearInterval(interval); //added 
     }, []);
 
     const handleItemClick = (item) => {
