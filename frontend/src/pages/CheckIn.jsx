@@ -7,16 +7,19 @@ function CheckIn({ user }) {
     const [selectedClient, setSelectedClient] = useState('');
     const [selectedEmployee, setSelectedEmployee] = useState('');
     const [notes, setNotes] = useState('');
-    const [location, setLocation] = useState(null);
+    const [location, setLocation] = useState(null); // 📍 stores current location
     const [activeCheckin, setActiveCheckin] = useState(null);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    // 📏 Distance related state
+    const [distance, setDistance] = useState(null);
+    const [distanceWarning, setDistanceWarning] = useState('');
 
     useEffect(() => {
         fetchData();
-        getCurrentLocation();
+        getCurrentLocation(); // 📍 fetch location on page load
     }, []);
 
     const fetchData = async () => {
@@ -32,21 +35,20 @@ function CheckIn({ user }) {
 
             const [clientsRes, activeRes, teamRes] = await Promise.all(requests);
 
-            // DEBUG: Set state only if API call succeeds
             if (clientsRes?.data?.success) setClients(clientsRes.data.data);
             if (activeRes?.data?.success) setActiveCheckin(activeRes.data.data);
             if (teamRes?.data?.success) setTeam(teamRes.data.data);
         } catch (err) {
-            // DEBUG: Display fetch errors clearly
             setError('Failed to load data');
         } finally {
             setLoading(false);
         }
     };
 
-    // DEBUG: Location logic unchanged, just ensure fallback exists
+    // 📍 LOCATION LOGIC (already existed, unchanged)
     const getCurrentLocation = () => {
         if (!navigator.geolocation) {
+            // fallback location (Gurgaon)
             setLocation({ latitude: 28.4595, longitude: 77.0266 });
             return;
         }
@@ -59,6 +61,7 @@ function CheckIn({ user }) {
                 });
             },
             () => {
+                // fallback if permission denied
                 setLocation({ latitude: 28.4595, longitude: 77.0266 });
             }
         );
@@ -70,7 +73,7 @@ function CheckIn({ user }) {
         setSuccess('');
         setSubmitting(true);
 
-        // DEBUG: Prevent check-in if location not ready
+        // ⛔ Prevent check-in if location not ready
         if (!location) {
             setError('Fetching location, please wait...');
             setSubmitting(false);
@@ -80,27 +83,38 @@ function CheckIn({ user }) {
         try {
             const payload = {
                 client_id: selectedClient,
-                latitude: location.latitude,
-                longitude: location.longitude,
+                latitude: location.latitude,   // 📍 sent to backend
+                longitude: location.longitude, // 📍 sent to backend
                 notes
             };
 
-            if (user.role === 'manager') payload.employee_id = selectedEmployee;
+            if (user.role === 'manager') {
+                payload.employee_id = selectedEmployee;
+            }
 
             const res = await api.post('/checkin', payload);
 
-            // DEBUG: Handle success & error explicitly
+            // if (res.data.success) {
+            //     setSuccess('Checked in successfully!');
+            //     setSelectedClient('');
+            //     setSelectedEmployee('');
+            //     setNotes('');
+            //     fetchData();
+            // }
             if (res.data.success) {
                 setSuccess('Checked in successfully!');
+                setDistance(res.data.distance_from_client);
+                setDistanceWarning(res.data.distance_warning || '');
                 setSelectedClient('');
                 setSelectedEmployee('');
                 setNotes('');
-                fetchData(); // Refresh active check-in & clients
-            } else {
+                fetchData();
+            }
+
+             else {
                 setError(res.data.message);
             }
         } catch (err) {
-            // DEBUG: Capture backend errors
             setError(err.response?.data?.message || 'Check-in failed');
         } finally {
             setSubmitting(false);
@@ -114,13 +128,9 @@ function CheckIn({ user }) {
 
         try {
             const res = await api.put('/checkin/checkout');
-
-            // DEBUG: Explicit success/error handling
             if (res.data.success) {
                 setSuccess('Checked out successfully!');
                 setActiveCheckin(null);
-            } else {
-                setError(res.data.message);
             }
         } catch (err) {
             setError(err.response?.data?.message || 'Checkout failed');
@@ -141,14 +151,41 @@ function CheckIn({ user }) {
         <div>
             <h2 className="text-2xl font-bold mb-6">Check In / Out</h2>
 
-            {/* DEBUG: Show error/success messages */}
             {error && <div className="bg-red-100 text-red-700 p-3 mb-4 rounded">{error}</div>}
             {success && <div className="bg-green-100 text-green-700 p-3 mb-4 rounded">{success}</div>}
 
+            {/* 📍 LOCATION DISPLAY (NEW – UI ONLY) */}
+            <div className="bg-gray-50 p-3 rounded mb-4 text-sm">
+                {location ? (
+                    <>
+                        <p><strong>Latitude:</strong> {location.latitude}</p>
+                        <p><strong>Longitude:</strong> {location.longitude}</p>
+                    </>
+                ) : (
+                    <p>Fetching current location...</p>
+                )}
+            </div>
+            {/* 📏 DISTANCE DISPLAY */}
+            {distance !== null && (
+                <div className="bg-yellow-50 p-3 rounded mb-4 text-sm">
+                    <p>
+                        <strong>Distance from client:</strong> {distance} km
+                    </p>
+
+                    {distanceWarning && (
+                        <p className="text-red-600 font-semibold mt-1">
+                            {distanceWarning}
+                        </p>
+                    )}
+                </div>
+            )}
+
             {/* Active Check-in */}
-            {activeCheckin ? (
+            {activeCheckin && (
                 <div className="bg-blue-50 p-6 rounded mb-6">
-                    <p>Checked in at <strong>{activeCheckin.client_name}</strong></p>
+                    <p>
+                        Checked in at <strong>{activeCheckin.client_name}</strong>
+                    </p>
                     <button
                         onClick={handleCheckOut}
                         disabled={submitting}
@@ -157,7 +194,10 @@ function CheckIn({ user }) {
                         {submitting ? 'Processing...' : 'Check Out'}
                     </button>
                 </div>
-            ) : (
+            )}
+
+            {/* New Check-in */}
+            {!activeCheckin && (
                 <form onSubmit={handleCheckIn} className="bg-white p-6 rounded shadow">
                     {user.role === 'manager' && (
                         <div className="mb-4">
@@ -170,7 +210,9 @@ function CheckIn({ user }) {
                             >
                                 <option value="">Choose employee</option>
                                 {team.map(emp => (
-                                    <option key={emp.id} value={emp.id}>{emp.name} ({emp.email})</option>
+                                    <option key={emp.id} value={emp.id}>
+                                        {emp.name} ({emp.email})
+                                    </option>
                                 ))}
                             </select>
                         </div>
@@ -186,7 +228,9 @@ function CheckIn({ user }) {
                         >
                             <option value="">Choose client</option>
                             {clients.map(c => (
-                                <option key={c.id} value={c.id}>{c.name} - {c.address}</option>
+                                <option key={c.id} value={c.id}>
+                                    {c.name} - {c.address}
+                                </option>
                             ))}
                         </select>
                     </div>
@@ -198,13 +242,12 @@ function CheckIn({ user }) {
                         placeholder="Notes (optional)"
                     />
 
-                    {/* DEBUG: disable submit until all validation passes */}
                     <button
                         type="submit"
                         disabled={
                             submitting ||
                             !selectedClient ||
-                            !location ||
+                            !location || // 📍 disable until location is ready
                             (user.role === 'manager' && !selectedEmployee)
                         }
                         className="w-full bg-blue-600 text-white py-2 rounded"
