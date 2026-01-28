@@ -8,10 +8,10 @@ function History({ user }) {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
 
-    useEffect(() => {
+    useEffect(() => {      //Now automatically refetches history whenever startDate or endDate changes. This makes filtering more reactive
+        setLoading(true);
         fetchHistory();
-    }, []);
-
+    }, [startDate, endDate]);
     const fetchHistory = async () => {
         try {
             let url = '/checkin/history';
