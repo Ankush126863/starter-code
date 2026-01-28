@@ -1,18 +1,34 @@
 const express = require('express');
-const pool = require('../config/database');
+const db = require('../scripts/init-db'); // better-sqlite3 DB instance
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Get assigned clients for employee
-router.get('/clients', authenticateToken, async (req, res) => {
+/* =========================================================
+   GET CLIENTS (Employee / Manager)
+========================================================= */
+router.get('/clients', authenticateToken, (req, res) => {
     try {
-        const [clients] = await pool.execute(
-            `SELECT c.* FROM clients c
-             INNER JOIN employee_clients ec ON c.id = ec.client_id
-             WHERE ec.employee_id = ?`,
-            [req.user.id]
-        );
+        let clients;
+
+        if (req.user.role === 'manager') {
+            // Manager sees all clients assigned to their team
+            clients = db.prepare(`
+                SELECT DISTINCT c.*
+                FROM clients c
+                INNER JOIN employee_clients ec ON c.id = ec.client_id
+                INNER JOIN users u ON ec.employee_id = u.id
+                WHERE u.manager_id = ?
+            `).all(req.user.id);
+        } else {
+            // Employee sees only their assigned clients
+            clients = db.prepare(`
+                SELECT c.*
+                FROM clients c
+                INNER JOIN employee_clients ec ON c.id = ec.client_id
+                WHERE ec.employee_id = ?
+            `).all(req.user.id);
+        }
 
         res.json({ success: true, data: clients });
     } catch (error) {
@@ -21,73 +37,134 @@ router.get('/clients', authenticateToken, async (req, res) => {
     }
 });
 
-// Create new check-in
-router.post('/', authenticateToken, async (req, res) => {
+/* =========================================================
+   CREATE CHECK-IN
+   (debug fixes only: proper validation, status codes)
+========================================================= */
+router.post('/', authenticateToken, (req, res) => {
     try {
-        const { client_id, latitude, longitude, notes } = req.body;
+        const { client_id, latitude, longitude, notes, employee_id } = req.body;
 
-        if (!client_id) {
-            return res.status(200).json({ success: false, message: 'Client ID is required' });
-        }
-
-        // Check if employee is assigned to this client
-        const [assignments] = await pool.execute(
-            'SELECT * FROM employee_clients WHERE employee_id = ? AND client_id = ?',
-            [req.user.id, client_id]
-        );
-
-        if (assignments.length === 0) {
-            return res.status(403).json({ success: false, message: 'You are not assigned to this client' });
-        }
-
-        // Check for existing active check-in
-        const [activeCheckins] = await pool.execute(
-            'SELECT * FROM checkins WHERE employee_id = ? AND status = "checked_in"',
-            [req.user.id]
-        );
-
-        if (activeCheckins.length > 0) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'You already have an active check-in. Please checkout first.' 
+        // Validate required fields
+        if (!client_id || latitude == null || longitude == null) {
+            return res.status(400).json({
+                success: false,
+                message: 'Client ID and location are required'
             });
         }
 
-        const [result] = await pool.execute(
-            `INSERT INTO checkins (employee_id, client_id, lat, lng, notes, status)
-             VALUES (?, ?, ?, ?, ?, 'checked_in')`,
-            [req.user.id, client_id, latitude, longitude, notes || null]
+        // Default employee checks in for self
+        let checkinEmployeeId = req.user.id;
+
+        // Manager check-in for team member
+        if (req.user.role === 'manager') {
+            if (!employee_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'employee_id is required for managers'
+                });
+            }
+
+            const teamMember = db.prepare(`
+                SELECT id FROM users
+                WHERE id = ? AND manager_id = ?
+            `).get(employee_id, req.user.id);
+
+            if (!teamMember) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Employee does not belong to your team'
+                });
+            }
+
+            checkinEmployeeId = employee_id;
+        }
+
+        // Validate client assignment
+        const assignment = db.prepare(`
+            SELECT 1 FROM employee_clients
+            WHERE employee_id = ? AND client_id = ?
+        `).get(checkinEmployeeId, client_id);
+
+        if (!assignment) {
+            return res.status(403).json({
+                success: false,
+                message: 'Employee is not assigned to this client'
+            });
+        }
+
+        // Prevent multiple active check-ins
+        const activeCheckin = db.prepare(`
+            SELECT 1 FROM checkins
+            WHERE employee_id = ? AND status = 'checked_in'
+        `).get(checkinEmployeeId);
+
+        if (activeCheckin) {
+            return res.status(400).json({
+                success: false,
+                message: 'Employee already has an active check-in'
+            });
+        }
+
+        // Insert check-in
+        const result = db.prepare(`
+            INSERT INTO checkins (
+                employee_id,
+                client_id,
+                latitude,
+                longitude,
+                notes,
+                status
+            )
+            VALUES (?, ?, ?, ?, ?, 'checked_in')
+        `).run(
+            checkinEmployeeId,
+            client_id,
+            latitude,
+            longitude,
+            notes || null
         );
 
         res.status(201).json({
             success: true,
-            data: {
-                id: result.insertId,
-                message: 'Checked in successfully'
-            }
+            message: 'Checked in successfully',
+            id: result.lastInsertRowid
         });
+
     } catch (error) {
         console.error('Check-in error:', error);
-        res.status(500).json({ success: false, message: 'Check-in failed' });
+        res.status(500).json({
+            success: false,
+            message: 'Check-in failed'
+        });
     }
 });
 
-// Checkout from current location
-router.put('/checkout', authenticateToken, async (req, res) => {
+/* =========================================================
+   CHECKOUT
+========================================================= */
+router.put('/checkout', authenticateToken, (req, res) => {
     try {
-        const [activeCheckins] = await pool.execute(
-            'SELECT * FROM checkins WHERE employee_id = ? ORDER BY checkin_time DESC LIMIT 1',
-            [req.user.id]
-        );
+        const activeCheckin = db.prepare(`
+            SELECT * FROM checkins
+            WHERE employee_id = ? AND status = 'checked_in'
+            ORDER BY checkin_time DESC
+            LIMIT 1
+        `).get(req.user.id);
 
-        if (activeCheckins.length === 0) {
-            return res.status(404).json({ success: false, message: 'No active check-in found' });
+        if (!activeCheckin) {
+            return res.status(404).json({
+                success: false,
+                message: 'No active check-in found'
+            });
         }
 
-        await pool.execute(
-            'UPDATE checkins SET checkout_time = NOW(), status = "checked_out" WHERE id = ?',
-            [activeCheckins[0].id]
-        );
+        db.prepare(`
+            UPDATE checkins
+            SET checkout_time = CURRENT_TIMESTAMP,
+                status = 'checked_out'
+            WHERE id = ?
+        `).run(activeCheckin.id);
 
         res.json({ success: true, message: 'Checked out successfully' });
     } catch (error) {
@@ -96,13 +173,15 @@ router.put('/checkout', authenticateToken, async (req, res) => {
     }
 });
 
-// Get check-in history
-router.get('/history', authenticateToken, async (req, res) => {
+/* =========================================================
+   CHECK-IN HISTORY
+========================================================= */
+router.get('/history', authenticateToken, (req, res) => {
     try {
         const { start_date, end_date } = req.query;
-        
+
         let query = `
-            SELECT ch.*, c.name as client_name, c.address as client_address
+            SELECT ch.*, c.name AS client_name, c.address AS client_address
             FROM checkins ch
             INNER JOIN clients c ON ch.client_id = c.id
             WHERE ch.employee_id = ?
@@ -110,15 +189,17 @@ router.get('/history', authenticateToken, async (req, res) => {
         const params = [req.user.id];
 
         if (start_date) {
-            query += ` AND DATE(ch.checkin_time) >= '${start_date}'`;
+            query += ' AND DATE(ch.checkin_time) >= ?';
+            params.push(start_date);
         }
         if (end_date) {
-            query += ` AND DATE(ch.checkin_time) <= '${end_date}'`;
+            query += ' AND DATE(ch.checkin_time) <= ?';
+            params.push(end_date);
         }
 
         query += ' ORDER BY ch.checkin_time DESC';
 
-        const [checkins] = await pool.execute(query, params);
+        const checkins = db.prepare(query).all(...params);
 
         res.json({ success: true, data: checkins });
     } catch (error) {
@@ -127,21 +208,23 @@ router.get('/history', authenticateToken, async (req, res) => {
     }
 });
 
-// Get current active check-in
-router.get('/active', authenticateToken, async (req, res) => {
+/* =========================================================
+   ACTIVE CHECK-IN
+========================================================= */
+router.get('/active', authenticateToken, (req, res) => {
     try {
-        const [checkins] = await pool.execute(
-            `SELECT ch.*, c.name as client_name 
-             FROM checkins ch
-             INNER JOIN clients c ON ch.client_id = c.id
-             WHERE ch.employee_id = ? AND ch.status = 'checked_in'
-             ORDER BY ch.checkin_time DESC LIMIT 1`,
-            [req.user.id]
-        );
+        const activeCheckin = db.prepare(`
+            SELECT ch.*, c.name AS client_name
+            FROM checkins ch
+            INNER JOIN clients c ON ch.client_id = c.id
+            WHERE ch.employee_id = ? AND ch.status = 'checked_in'
+            ORDER BY ch.checkin_time DESC
+            LIMIT 1
+        `).get(req.user.id);
 
-        res.json({ 
-            success: true, 
-            data: checkins.length > 0 ? checkins[0] : null 
+        res.json({
+            success: true,
+            data: activeCheckin || null
         });
     } catch (error) {
         console.error('Active checkin error:', error);
