@@ -5,6 +5,26 @@ const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 
 /* =========================================================
+   📐 HELPER: Haversine Distance Formula
+   - Calculates distance between two lat/long points
+   - Returns distance in KM (rounded to 2 decimals)
+========================================================= */
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Earth radius in KM
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) *
+        Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) ** 2;
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return +(R * c).toFixed(2);
+}
+
+/* =========================================================
    GET CLIENTS (Employee / Manager)
 ========================================================= */
 router.get('/clients', authenticateToken, (req, res) => {
@@ -38,14 +58,12 @@ router.get('/clients', authenticateToken, (req, res) => {
 });
 
 /* =========================================================
-   CREATE CHECK-IN
-   (debug fixes only: proper validation, status codes)
+   CREATE CHECK-IN  ✅ Feature A implemented here
 ========================================================= */
 router.post('/', authenticateToken, (req, res) => {
     try {
         const { client_id, latitude, longitude, notes, employee_id } = req.body;
 
-        // Validate required fields
         if (!client_id || latitude == null || longitude == null) {
             return res.status(400).json({
                 success: false,
@@ -53,10 +71,10 @@ router.post('/', authenticateToken, (req, res) => {
             });
         }
 
-        // Default employee checks in for self
+        // Default: employee checks in for self
         let checkinEmployeeId = req.user.id;
 
-        // Manager check-in for team member
+        /* ---------- Manager Check-in for Team Member ---------- */
         if (req.user.role === 'manager') {
             if (!employee_id) {
                 return res.status(400).json({
@@ -80,7 +98,7 @@ router.post('/', authenticateToken, (req, res) => {
             checkinEmployeeId = employee_id;
         }
 
-        // Validate client assignment
+        /* ---------- Validate Client Assignment ---------- */
         const assignment = db.prepare(`
             SELECT 1 FROM employee_clients
             WHERE employee_id = ? AND client_id = ?
@@ -93,7 +111,7 @@ router.post('/', authenticateToken, (req, res) => {
             });
         }
 
-        // Prevent multiple active check-ins
+        /* ---------- Prevent Multiple Active Check-ins ---------- */
         const activeCheckin = db.prepare(`
             SELECT 1 FROM checkins
             WHERE employee_id = ? AND status = 'checked_in'
@@ -106,28 +124,64 @@ router.post('/', authenticateToken, (req, res) => {
             });
         }
 
-        // Insert check-in
+        /* =====================================================
+           📍 FEATURE A: Distance Calculation
+        ===================================================== */
+
+        // Get client location
+        const client = db.prepare(`
+            SELECT latitude, longitude
+            FROM clients
+            WHERE id = ?
+        `).get(client_id);
+
+        if (!client || client.latitude == null || client.longitude == null) {
+            return res.status(400).json({
+                success: false,
+                message: 'Client location not available'
+            });
+        }
+
+        // Calculate distance (KM)
+        const distanceFromClient = calculateDistance(
+            latitude,
+            longitude,
+            client.latitude,
+            client.longitude
+        );
+
+        // Warning if far (>500 meters)
+        const distanceWarning =
+            distanceFromClient > 0.5
+                ? 'You are far from the client location'
+                : null;
+
+        /* ---------- Insert Check-in with Distance ---------- */
         const result = db.prepare(`
             INSERT INTO checkins (
                 employee_id,
                 client_id,
                 latitude,
                 longitude,
+                distance_from_client,
                 notes,
                 status
             )
-            VALUES (?, ?, ?, ?, ?, 'checked_in')
+            VALUES (?, ?, ?, ?, ?, ?, 'checked_in')
         `).run(
             checkinEmployeeId,
             client_id,
             latitude,
             longitude,
+            distanceFromClient,
             notes || null
         );
 
         res.status(201).json({
             success: true,
             message: 'Checked in successfully',
+            distance_from_client: distanceFromClient,
+            distance_warning: distanceWarning,
             id: result.lastInsertRowid
         });
 
@@ -174,7 +228,7 @@ router.put('/checkout', authenticateToken, (req, res) => {
 });
 
 /* =========================================================
-   CHECK-IN HISTORY
+   CHECK-IN HISTORY (distance included automatically)
 ========================================================= */
 router.get('/history', authenticateToken, (req, res) => {
     try {
