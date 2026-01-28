@@ -1,12 +1,14 @@
 import axios from 'axios';
 
+// const api = axios.create({
+//   baseURL: '/api',
+//   headers: {
+//     'Content-Type': 'application/json',
+//   },
+// });
 const api = axios.create({
-  baseURL: '/api',
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  baseURL: "http://localhost:3001/api", // must match your backend
 });
-
 // ==========================
 // Request Interceptor
 // ==========================
@@ -46,5 +48,18 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// ==========================
+// Reports API
+// ==========================
+export const getDailySummaryReport = (date, employeeId = null) => {
+  const params = { date };
+
+  if (employeeId) {
+    params.employee_id = employeeId;
+  }
+
+  return api.get('/reports/daily-summary', { params });
+};
 
 export default api;

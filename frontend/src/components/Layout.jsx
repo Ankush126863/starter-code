@@ -2,12 +2,17 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 
 function Layout({ user, onLogout }) {
     const location = useLocation();
-
     const navItems = [
-        { path: '/dashboard', label: 'Dashboard' },
-        { path: '/checkin', label: 'Check In' },
-        { path: '/history', label: 'History' }
+    { path: '/dashboard', label: 'Dashboard' },
+    { path: '/checkin', label: 'Check In' },
+    { path: '/history', label: 'History' },
+
+    // 👇 Manager-only
+    ...(user.role === 'manager'
+        ? [{ path: '/daily-report', label: 'Daily Report' }]
+        : [])
     ];
+
 
     return (
         <div className="min-h-screen bg-gray-100">

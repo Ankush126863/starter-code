@@ -1,9 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import CheckIn from './pages/CheckIn';
 import History from './pages/History';
+import DailyReport from './pages/DailyReport'; // ✅ ADD
 import Layout from './components/Layout';
 
 function App() {
@@ -11,10 +13,9 @@ function App() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Check for existing token on mount
         const token = localStorage.getItem('token');
         const userData = localStorage.getItem('user');
-        
+
         if (token && userData) {
             setUser(JSON.parse(userData));
         }
@@ -44,26 +45,44 @@ function App() {
     return (
         <BrowserRouter>
             <Routes>
-                <Route 
-                    path="/login" 
+                {/* Login */}
+                <Route
+                    path="/login"
                     element={
                         user ? <Navigate to="/dashboard" /> : <Login onLogin={handleLogin} />
-                    } 
+                    }
                 />
-                <Route 
-                    path="/" 
+
+                {/* Protected Routes */}
+                <Route
+                    path="/"
                     element={
-                        user ? <Layout user={user} onLogout={handleLogout} /> : <Navigate to="/login" />
+                        user ? (
+                            <Layout user={user} onLogout={handleLogout} />
+                        ) : (
+                            <Navigate to="/login" />
+                        )
                     }
                 >
                     <Route index element={<Navigate to="/dashboard" />} />
                     <Route path="dashboard" element={<Dashboard user={user} />} />
                     <Route path="checkin" element={<CheckIn user={user} />} />
                     <Route path="history" element={<History user={user} />} />
+
+                    {/* ✅ DAILY REPORT (Manager) */}
+                    <Route
+                        path="daily-report"
+                        element={
+                            user?.role === 'manager'
+                                ? <DailyReport />
+                                : <Navigate to="/dashboard" />
+                        }
+                    />
                 </Route>
             </Routes>
         </BrowserRouter>
     );
 }
+
 
 export default App;

@@ -1,24 +1,15 @@
 const express = require('express');
-const db = require('../scripts/init-db');
-const { authenticateToken } = require('../middleware/auth');
-
 const router = express.Router();
 
-// Manager: get team members
-router.get('/team', authenticateToken, (req, res) => {
-    try {
-        if (req.user.role !== 'manager') {
-            return res.status(403).json({
-                success: false,
-                message: 'Access denied'
-            });
-        }
+const { authenticateToken, requireManager } = require('../middleware/auth');
+const db = require('../config/database');
 
-        const team = db.prepare(`
-            SELECT id, name, email
-            FROM users
-            WHERE manager_id = ?
-        `).all(req.user.id);
+router.get('/team', authenticateToken, requireManager, async (req, res) => {
+    try {
+        const [team] = await db.execute(
+            `SELECT id, name, email FROM users WHERE manager_id = ?`,
+            [req.user.id]
+        );
 
         res.json({ success: true, data: team });
     } catch (err) {
