@@ -1,24 +1,32 @@
 const Database = require('better-sqlite3');
 const bcrypt = require('bcrypt');
 const path = require('path');
+const fs = require('fs');
 
 const dbPath = path.join(__dirname, '..', 'database.sqlite');
 
-// Delete existing database to start fresh
-const fs = require('fs');
+// Delete existing database if possible
 if (fs.existsSync(dbPath)) {
-    fs.unlinkSync(dbPath);
-    console.log('Deleted existing database');
+    try {
+        fs.unlinkSync(dbPath);
+        console.log('Deleted existing database');
+    } catch (err) {
+        console.warn('Could not delete database (maybe it is in use):', err.message);
+        console.warn('Continuing with existing database...');
+    }
 }
 
+// Open database
 const db = new Database(dbPath);
+
+// Enable foreign keys
+db.pragma('foreign_keys = ON');
 
 console.log('Initializing database...');
 
 // Create tables
 db.exec(`
-    -- Users table
-    CREATE TABLE users (
+    CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         email TEXT UNIQUE NOT NULL,
@@ -29,8 +37,7 @@ db.exec(`
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
-    -- Clients table
-    CREATE TABLE clients (
+    CREATE TABLE IF NOT EXISTS clients (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         address TEXT,
@@ -39,8 +46,7 @@ db.exec(`
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
-    -- Employee-Client assignments
-    CREATE TABLE employee_clients (
+    CREATE TABLE IF NOT EXISTS employee_clients (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         employee_id INTEGER NOT NULL,
         client_id INTEGER NOT NULL,
@@ -49,9 +55,7 @@ db.exec(`
         FOREIGN KEY (client_id) REFERENCES clients(id)
     );
 
-    -- Attendance/Check-ins table
-    -- NOTE: latitude/longitude stored correctly as REAL
-    CREATE TABLE checkins (
+    CREATE TABLE IF NOT EXISTS checkins (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         employee_id INTEGER NOT NULL,
         client_id INTEGER NOT NULL,
@@ -64,10 +68,9 @@ db.exec(`
         status TEXT DEFAULT 'checked_in' CHECK(status IN ('checked_in', 'checked_out'))
     );
 
-    -- Create indexes
-    CREATE INDEX idx_checkins_employee ON checkins(employee_id);
-    CREATE INDEX idx_checkins_date ON checkins(checkin_time);
-    CREATE INDEX idx_employee_clients ON employee_clients(employee_id, client_id);
+    CREATE INDEX IF NOT EXISTS idx_checkins_employee ON checkins(employee_id);
+    CREATE INDEX IF NOT EXISTS idx_checkins_date ON checkins(checkin_time);
+    CREATE INDEX IF NOT EXISTS idx_employee_clients ON employee_clients(employee_id, client_id);
 `);
 
 console.log('Tables created');
@@ -77,7 +80,7 @@ const hashedPassword = bcrypt.hashSync('password123', 10);
 
 // Insert users
 const insertUser = db.prepare(`
-    INSERT INTO users (name, email, password, role, manager_id) VALUES (?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO users (name, email, password, role, manager_id) VALUES (?, ?, ?, ?, ?)
 `);
 
 insertUser.run('Amit Sharma', 'manager@unolo.com', hashedPassword, 'manager', null);
@@ -87,9 +90,9 @@ insertUser.run('Vikram Patel', 'vikram@unolo.com', hashedPassword, 'employee', 1
 
 console.log('Users created');
 
-// Insert clients (locations in Gurugram/Delhi NCR)
+// Insert clients
 const insertClient = db.prepare(`
-    INSERT INTO clients (name, address, latitude, longitude) VALUES (?, ?, ?, ?)
+    INSERT OR IGNORE INTO clients (name, address, latitude, longitude) VALUES (?, ?, ?, ?)
 `);
 
 insertClient.run('ABC Corp', 'Cyber City, Gurugram', 28.4946, 77.0887);
@@ -102,7 +105,7 @@ console.log('Clients created');
 
 // Assign employees to clients
 const insertAssignment = db.prepare(`
-    INSERT INTO employee_clients (employee_id, client_id, assigned_date) VALUES (?, ?, ?)
+    INSERT OR IGNORE INTO employee_clients (employee_id, client_id, assigned_date) VALUES (?, ?, ?)
 `);
 
 insertAssignment.run(2, 1, '2024-01-01');
@@ -117,7 +120,7 @@ console.log('Assignments created');
 
 // Insert sample checkins
 const insertCheckin = db.prepare(`
-    INSERT INTO checkins (employee_id, client_id, checkin_time, checkout_time, latitude, longitude, notes, status)
+    INSERT OR IGNORE INTO checkins (employee_id, client_id, checkin_time, checkout_time, latitude, longitude, notes, status)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
@@ -130,6 +133,8 @@ insertCheckin.run(2, 1, '2024-01-16 09:00:00', null, 28.4950, 77.0890, 'Morning 
 
 console.log('Sample checkins created');
 
-db.close();
+// ✅ Export db
+module.exports = db;
+
 console.log('\n✅ Database initialized successfully!');
-console.log('Database file: database.sqlite');
+console.log('Database file:', dbPath);
