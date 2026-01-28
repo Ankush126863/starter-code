@@ -2,16 +2,17 @@ import { useState, useEffect } from 'react';
 import api from '../utils/api';
 
 function History({ user }) {
-    const [checkins, setCheckins] = useState(null);
+    const [checkins, setCheckins] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
 
-    useEffect(() => {      //Now automatically refetches history whenever startDate or endDate changes. This makes filtering more reactive
-        setLoading(true);
-        fetchHistory();
-    }, [startDate, endDate]);
+  useEffect(() => {
+    setLoading(true);
+    fetchHistory();
+ }, [startDate, endDate]); // Re-fetch when dates change
+
     const fetchHistory = async () => {
         try {
             let url = '/checkin/history';
