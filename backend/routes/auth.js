@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/database');
+const { isValidEmail } = require('../utils/validation');
 
 const router = express.Router();
 
@@ -12,6 +13,10 @@ router.post('/login', async (req, res) => {
 
         if (!email || !password) {
             return res.status(400).json({ success: false, message: 'Email and password required' });
+        }
+
+        if (!isValidEmail(email)) {
+            return res.status(400).json({ success: false, message: 'Invalid email address' });
         }
 
         const [users] = await pool.execute(
