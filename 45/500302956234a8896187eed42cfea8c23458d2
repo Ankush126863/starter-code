@@ -1,0 +1,54 @@
+backend/routes/auth.js
+  s_931c745f16058e::t_0eb604ddbbff26 5,17-20
+backend/utils/validation.js
+  h_c73f7d0636c038 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "autter_version": "2.2.0",
+  "base_commit_sha": "45500302956234a8896187eed42cfea8c23458d2",
+  "branch": "main",
+  "prompts": {
+    "s_931c745f16058e": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "88e18553-be78-4bad-a5b8-af9bda1d89ca",
+        "model": "gpt-4.1"
+      },
+      "human_author": "Ankush Yadav <ankush.yadav.ug22@nsut.ac.in>",
+      "total_additions": 5,
+      "total_deletions": 0,
+      "accepted_lines": 89,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_c73f7d0636c038": {
+      "author": "Ankush Yadav <ankush.yadav.ug22@nsut.ac.in>"
+    }
+  },
+  "sessions": {
+    "s_931c745f16058e": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "88e18553-be78-4bad-a5b8-af9bda1d89ca",
+        "model": "gpt-4.1"
+      },
+      "human_author": "Ankush Yadav <ankush.yadav.ug22@nsut.ac.in>",
+      "stats": {
+        "total_additions": 5,
+        "total_deletions": 0,
+        "accepted_lines": 89,
+        "overriden_lines": 0,
+        "files": {
+          "backend/routes/auth.js": {
+            "total_additions": 5,
+            "total_deletions": 0,
+            "accepted_lines": 89,
+            "overriden_lines": 0
+          }
+        }
+      }
+    }
+  }
+}
